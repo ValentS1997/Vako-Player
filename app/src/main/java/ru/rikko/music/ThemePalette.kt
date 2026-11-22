@@ -17,6 +17,7 @@ data class ThemeColors(
     val accent: Color,
     val light: Boolean,
     val scheme: ColorScheme,
+    val warning: String? = null,
 )
 
 object ThemePalette {
@@ -35,7 +36,7 @@ object ThemePalette {
     fun parseHex(value: String): Color? {
         val normalized = value.trim().removePrefix("#")
         if (!normalized.matches(Regex("[0-9a-fA-F]{6}"))) return null
-        return Color(android.graphics.Color.parseColor("#$normalized"))
+        return Color(0xFF000000L or normalized.toLong(16))
     }
 
     fun resolve(baseIndex: Int, accentIndex: Int, custom: Boolean,
@@ -55,14 +56,36 @@ object ThemePalette {
         val accentChoice = accents[accentIndex.coerceIn(0, accents.lastIndex)]
         val presetAccent = if (base == 0) accentChoice.light else accentChoice.dark
         val background = if (custom) parseHex(customBackground) ?: presetBackground else presetBackground
-        val surface = if (custom) parseHex(customSurface) ?: presetSurface else presetSurface
-        val text = if (custom) parseHex(customText) ?: presetText else presetText
-        val accent = if (custom) parseHex(customAccent) ?: presetAccent else presetAccent
+        val requestedSurface = if (custom) parseHex(customSurface) ?: presetSurface else presetSurface
+        val requestedText = if (custom) parseHex(customText) ?: presetText else presetText
+        val requestedAccent = if (custom) parseHex(customAccent) ?: presetAccent else presetAccent
+        // A single foreground cannot always contrast with both user-selected surfaces.
+        // In that case keep the background and use it for panels too, so Reset stays readable.
+        val readableText = listOf(requestedText, Color.Black, Color.White).firstOrNull {
+            contrast(it, background) >= 4.5f && contrast(it, requestedSurface) >= 4.5f
+        }
+        val text = readableText ?: listOf(Color.Black, Color.White).maxBy { contrast(it, background) }
+        val surface = if (contrast(text, requestedSurface) >= 4.5f) requestedSurface else background
+        // Icons and selected controls need at least 3:1 against adjacent surfaces.
+        val accentCandidates = listOf(requestedAccent, presetAccent, Color.Black, Color.White) +
+            (0..255 step 8).map { channel -> Color(0xFF000000L or (channel * 0x010101L)) }
+        val accent = accentCandidates.firstOrNull {
+            contrast(it, background) >= 3f && contrast(it, surface) >= 3f
+        } ?: accentCandidates.maxBy { min(contrast(it, background), contrast(it, surface)) }
+        val invalid = custom && listOf(customBackground, customSurface, customText, customAccent)
+            .any { parseHex(it) == null }
+        val adjusted = custom && (text != requestedText || surface != requestedSurface || accent != requestedAccent)
+        val warning = if (invalid || adjusted)
+            "Неверный HEX или низкий контраст. Цвета на экране скорректированы; исходные значения сохранены."
+        else null
         val light = background.luminance() > 0.48f
-        val variant = mix(surface, text, if (light) .06f else .10f)
+        val suggestedVariant = mix(surface, text, if (light) .06f else .10f)
+        val variant = if (contrast(text, suggestedVariant) >= 4.5f) suggestedVariant else surface
         val muted = readableMuted(text, background, surface, variant, light)
-        val accentContainer = mix(background, accent, if (light) .15f else .21f)
-        val onAccent = if (accent.luminance() > .18f) Color(0xFF111713) else Color.White
+        val suggestedAccentContainer = mix(background, accent, if (light) .15f else .21f)
+        val accentContainer = if (contrast(text, suggestedAccentContainer) >= 4.5f)
+            suggestedAccentContainer else surface
+        val onAccent = listOf(Color.Black, Color.White).maxBy { contrast(it, accent) }
         val outline = mix(text, background, .58f)
         val scheme = if (light) lightColorScheme(
             primary = accent, onPrimary = onAccent, primaryContainer = accentContainer,
@@ -83,7 +106,7 @@ object ThemePalette {
             onSurfaceVariant = muted, outline = outline,
             error = Color(0xFFFF8B84), onError = Color(0xFF3B0907),
         )
-        return ThemeColors(background, surface, text, accent, light, scheme)
+        return ThemeColors(background, surface, text, accent, light, scheme, warning)
     }
 
     private fun mix(first: Color, second: Color, secondFraction: Float): Color {
@@ -113,7 +136,7 @@ object ThemePalette {
         return mix(text, background, low)
     }
 
-    private fun contrast(first: Color, second: Color): Float {
+    internal fun contrast(first: Color, second: Color): Float {
         val a = first.luminance()
         val b = second.luminance()
         return (max(a, b) + .05f) / (min(a, b) + .05f)
