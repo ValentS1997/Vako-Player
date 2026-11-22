@@ -23,6 +23,7 @@ data class LocalSong(
     val folder: String = "",
     val volume: String = "selected",
     val dateAdded: Long = 0,
+    val dateModified: Long = 0,
 )
 
 /** Local library index and user-defined organization. No audio data is copied. */
@@ -67,6 +68,7 @@ class LibraryStore(private val context: Context) {
                 MediaStore.Audio.Media.RELATIVE_PATH,
                 MediaStore.MediaColumns.VOLUME_NAME,
                 MediaStore.Audio.Media.DATE_ADDED,
+                MediaStore.Audio.Media.DATE_MODIFIED,
             )
             try {
                 context.contentResolver.query(
@@ -83,6 +85,7 @@ class LibraryStore(private val context: Context) {
                     val path = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.RELATIVE_PATH)
                     val volume = cursor.getColumnIndex(MediaStore.MediaColumns.VOLUME_NAME)
                     val dateAdded = cursor.getColumnIndex(MediaStore.Audio.Media.DATE_ADDED)
+                    val dateModified = cursor.getColumnIndex(MediaStore.Audio.Media.DATE_MODIFIED)
                     while (cursor.moveToNext()) {
                         val uri = ContentUris.withAppendedId(
                             MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, cursor.getLong(id)
@@ -101,7 +104,8 @@ class LibraryStore(private val context: Context) {
                             durationMs = cursor.getLong(duration).coerceAtLeast(0L),
                             folder = folder,
                             volume = volumeName,
-                            dateAdded = if (dateAdded >= 0) cursor.getLong(dateAdded) else 0L
+                            dateAdded = if (dateAdded >= 0) cursor.getLong(dateAdded) else 0L,
+                            dateModified = if (dateModified >= 0) cursor.getLong(dateModified) else 0L
                         )
                     }
                 }
@@ -122,6 +126,7 @@ class LibraryStore(private val context: Context) {
                     MediaStore.Audio.Media.RELATIVE_PATH,
                     MediaStore.MediaColumns.VOLUME_NAME,
                     MediaStore.Audio.Media.DATE_ADDED,
+                    MediaStore.Audio.Media.DATE_MODIFIED,
                 ) else arrayOf(OpenableColumns.DISPLAY_NAME)
                 val song = context.contentResolver.query(uri, projection, null, null, null)?.use { cursor ->
                     if (!cursor.moveToFirst()) return@use null
@@ -141,6 +146,7 @@ class LibraryStore(private val context: Context) {
                         folder = value(MediaStore.Audio.Media.RELATIVE_PATH)?.trim('/') ?: "",
                         volume = value(MediaStore.MediaColumns.VOLUME_NAME) ?: "selected",
                         dateAdded = value(MediaStore.Audio.Media.DATE_ADDED)?.toLongOrNull() ?: 0L,
+                        dateModified = value(MediaStore.Audio.Media.DATE_MODIFIED)?.toLongOrNull() ?: 0L,
                     )
                 }
                 if (song != null) found[value] = song

@@ -81,6 +81,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.IconButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -177,6 +178,7 @@ class MainActivity : ComponentActivity() {
     private var genresEnabled by mutableStateOf(true)
     private var favoritesEnabled by mutableStateOf(true)
     private var albumGridEnabled by mutableStateOf(false)
+    private var audioViewMode by mutableStateOf(0)
     private var favoriteUris by mutableStateOf<Set<String>>(emptySet())
     private var selectedBrowseGroup by mutableStateOf("")
     private var browseSearch by mutableStateOf("")
@@ -443,6 +445,7 @@ class MainActivity : ComponentActivity() {
         eqEnabled = audioPrefs.getBoolean("eq_enabled", false)
         eqLevels = audioPrefs.getString("eq_levels", "")?.split(',')?.mapNotNull(String::toShortOrNull).orEmpty()
         val libraryPrefs = getSharedPreferences("rikko_local", MODE_PRIVATE)
+        audioViewMode = libraryPrefs.getInt("audio_view_mode", 0).coerceIn(0, 2)
         sortMode = libraryPrefs.getInt("sort_mode", 0).coerceIn(0, 2)
         sortDescending = libraryPrefs.getBoolean("sort_descending", false)
         recentUris = libraryStore.recentUris()
@@ -2084,8 +2087,21 @@ class MainActivity : ComponentActivity() {
     @Composable
     private fun LibraryScreen() {
         var sortMenuOpen by remember { mutableStateOf(false) }
+        var viewMenuOpen by remember { mutableStateOf(false) }
         VakoSectionHeader("Медиатека", if (scanning) "Сканирование…" else "${localSongs.size} файлов") {
             ActionIcon("☷", "Очередь воспроизведения", { showQueue = true; showSound = false })
+            if (libraryView == 0) {
+                ActionIcon("▦", "Вид локальной музыки", { viewMenuOpen = true })
+                DropdownMenu(expanded = viewMenuOpen, onDismissRequest = { viewMenuOpen = false }) {
+                    listOf("Список", "Крупная сетка", "Компактная сетка").forEachIndexed { index, label ->
+                        DropdownMenuItem(text = { Text(label) }, onClick = {
+                            audioViewMode = index
+                            getSharedPreferences("rikko_local", MODE_PRIVATE).edit().putInt("audio_view_mode", index).apply()
+                            viewMenuOpen = false
+                        })
+                    }
+                }
+            }
             if (libraryView == 0 || libraryView == 2) {
                 ActionIcon("⇅", "Сортировка медиатеки", { sortMenuOpen = true })
                 DropdownMenu(expanded = sortMenuOpen, onDismissRequest = { sortMenuOpen = false }) {
@@ -2195,6 +2211,7 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    @OptIn(ExperimentalFoundationApi::class)
     @Composable
     private fun AllSongsView() {
         VakoSearchField(localFilter, onValueChange = { localFilter = it; selectedLocalUris = emptySet() },
@@ -2211,8 +2228,33 @@ class MainActivity : ComponentActivity() {
                 "Аудиофайлов пока нет. Нажмите «Разрешить доступ» или «Добавить файл».",
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
         } else {
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(VakoUi.rowGap)) {
-                items(filtered, key = { it.uri.toString() }) { song -> LocalSongRow(song, source = filtered) }
+            if (audioViewMode == 0) {
+                LazyColumn(verticalArrangement = Arrangement.spacedBy(VakoUi.rowGap)) {
+                    items(filtered, key = { it.uri.toString() }) { song -> LocalSongRow(song, source = filtered) }
+                }
+            } else {
+                val columns = if (audioViewMode == 2 && LocalConfiguration.current.screenWidthDp >= 350) 3 else 2
+                LazyVerticalGrid(columns = GridCells.Fixed(columns),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    gridItems(filtered, key = { it.uri.toString() }) { song ->
+                        val tileMenu = remember(song.uri.toString()) { mutableStateOf(false) }
+                        Column(Modifier.vakoPanel(active = song.uri.toString() in selectedLocalUris,
+                            shape = VakoUi.row).clip(VakoUi.row)) {
+                            Box {
+                                AudioThumbnails.Artwork(song, Modifier.fillMaxWidth().aspectRatio(1f)
+                                    .combinedClickable(onClick = {
+                                        if (selectedLocalUris.isNotEmpty()) toggleLocalSelection(song) else tapLocal(song, filtered)
+                                    }, onLongClick = { toggleLocalSelection(song) }))
+                                Box(Modifier.align(Alignment.TopEnd)
+                                    .background(MaterialTheme.colorScheme.surface.copy(alpha = .78f))) {
+                                    ActionIcon("⋮", "Действия с ${song.title}", { tileMenu.value = true })
+                                }
+                            }
+                            LocalSongRow(song, source = filtered, tile = true, menuState = tileMenu)
+                        }
+                    }
+                }
             }
         }
     }
@@ -2536,27 +2578,30 @@ class MainActivity : ComponentActivity() {
     @OptIn(ExperimentalFoundationApi::class)
     @Composable
     private fun LocalSongRow(song: LocalSong, playlistName: String = "", source: List<LocalSong> = localSongs,
-                             displayTitle: String = song.title) {
-        var menuOpen by remember(song.uri.toString()) { mutableStateOf(false) }
+                             displayTitle: String = song.title, tile: Boolean = false,
+                             menuState: MutableState<Boolean>? = null) {
+        val menuOpenState: MutableState<Boolean> = menuState ?: remember(song.uri.toString()) { mutableStateOf(false) }
+        var menuOpen by menuOpenState
         val selected = song.uri.toString() in selectedLocalUris
-        Column(Modifier.padding(vertical = 2.dp)) {
-            Row(Modifier.fillMaxWidth().heightIn(min = if (compactRows) 56.dp else 72.dp)
-                .vakoPanel(active = selected, shape = VakoUi.row)
+        Column(Modifier.padding(vertical = if (tile) 0.dp else 2.dp)) {
+            Row(Modifier.fillMaxWidth().heightIn(min = if (tile) 48.dp else if (compactRows) 56.dp else 72.dp)
+                .then(if (tile) Modifier else Modifier.vakoPanel(active = selected, shape = VakoUi.row))
                 .combinedClickable(
                 onClick = { if (selectedLocalUris.isNotEmpty()) toggleLocalSelection(song) else tapLocal(song, source) },
                 onLongClick = { toggleLocalSelection(song) }
-            ).padding(start = 10.dp, top = 4.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                if (selectedLocalUris.isNotEmpty()) Checkbox(checked = selected, onCheckedChange = { toggleLocalSelection(song) })
-                else Text(if (song.uri.toString() in favoriteUris) "♥" else "♫", color = MaterialTheme.colorScheme.primary)
-                Spacer(Modifier.width(12.dp))
+            ).padding(start = if (tile) 6.dp else 10.dp, top = 4.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                if (selectedLocalUris.isNotEmpty() && !tile) Checkbox(checked = selected, onCheckedChange = { toggleLocalSelection(song) })
+                else if (!tile) Text(if (song.uri.toString() in favoriteUris) "♥" else "♫", color = MaterialTheme.colorScheme.primary)
+                if (!tile) Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f)) {
-                    Text(displayTitle, maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.SemiBold)
+                    Text(if (selected && tile) "✓ $displayTitle" else displayTitle,
+                        maxLines = if (tile) 2 else 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.SemiBold)
                     if (song.artist.isNotBlank()) Text(song.artist, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-                if (song.durationMs > 0) Text(LibraryBrowse.duration(song.durationMs),
+                if (song.durationMs > 0 && !tile) Text(LibraryBrowse.duration(song.durationMs),
                     modifier = Modifier.padding(start = 8.dp), style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
-                ActionIcon("⋮", "Действия с ${song.title}", { menuOpen = true })
+                if (!tile) ActionIcon("⋮", "Действия с ${song.title}", { menuOpen = true })
                 DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
                     DropdownMenuItem(text = { Text("Выбрать") }, onClick = {
                         toggleLocalSelection(song)
