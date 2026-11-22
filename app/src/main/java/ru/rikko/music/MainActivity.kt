@@ -2880,6 +2880,13 @@ class MainActivity : ComponentActivity() {
             appPreferences.setEnabled("theme_custom", enabled)
         }
         if (themeCustom) {
+            val preview = ThemePalette.resolve(themeBase, themeAccent, true,
+                themeBackgroundHex, themeSurfaceHex, themeTextHex, themeAccentHex)
+            preview.warning?.let { warning ->
+                Text(warning, color = MaterialTheme.colorScheme.onSurface,
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp))
+            }
             HexColorField("Фон", themeBackgroundHex) {
                 themeBackgroundHex = it; appPreferences.setString("theme_background", it)
             }
@@ -2897,7 +2904,7 @@ class MainActivity : ComponentActivity() {
             TextButton(onClick = {
                 themeCustom = false
                 appPreferences.setEnabled("theme_custom", false)
-            }) { Text("Вернуться к готовой теме") }
+            }) { Text("Сбросить тему") }
         }
         Spacer(Modifier.height(12.dp))
         Surface(color = MaterialTheme.colorScheme.surface, shape = RoundedCornerShape(12.dp),
