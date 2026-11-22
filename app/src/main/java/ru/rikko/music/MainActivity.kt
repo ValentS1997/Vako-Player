@@ -1406,6 +1406,8 @@ class MainActivity : ComponentActivity() {
                 delay(500)
             }
         }
+        val narrowTextLayout = LocalConfiguration.current.screenWidthDp < 360 &&
+            LocalDensity.current.fontScale >= 1.25f
         Scaffold(
             modifier = Modifier.vakoBackdrop(),
             containerColor = Color.Transparent,
@@ -1419,6 +1421,7 @@ class MainActivity : ComponentActivity() {
                         if (navigationVisible) {
                             val labels = mapOf(0 to "Медиатека", 1 to "Яндекс", 2 to "Видео", 3 to "Настройки")
                             val shortLabels = mapOf(0 to "Медиа", 1 to "Яндекс", 2 to "Видео", 3 to "Настр.")
+                            val iconLabels = mapOf(0 to "♫", 1 to "Я", 2 to "▷", 3 to "⚙")
                             val useShortLabels = LocalDensity.current.fontScale >= 1.25f ||
                                 LocalConfiguration.current.screenWidthDp < 390
                             val visible = moduleOrder.filter { it == 0 || it == 3 ||
@@ -1478,8 +1481,9 @@ class MainActivity : ComponentActivity() {
                                                 }
                                             }
                                         }.clickable(onClick = openModule), contentAlignment = Alignment.Center) {
-                                        Text((if (useShortLabels) shortLabels else labels)[index].orEmpty(),
+                                        Text((if (narrowTextLayout) iconLabels else if (useShortLabels) shortLabels else labels)[index].orEmpty(),
                                             maxLines = 1, overflow = TextOverflow.Ellipsis,
+                                            style = if (narrowTextLayout) MaterialTheme.typography.headlineSmall else MaterialTheme.typography.bodyLarge,
                                             color = if (activeTab == index || draggedModule == index) MaterialTheme.colorScheme.primary
                                                 else MaterialTheme.colorScheme.onSurfaceVariant,
                                             fontWeight = if (activeTab == index) FontWeight.Bold else FontWeight.Normal)
@@ -1499,7 +1503,7 @@ class MainActivity : ComponentActivity() {
                 Row(Modifier.fillMaxWidth().height(52.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text("VAKO PLAYER", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
                     Spacer(Modifier.weight(1f))
-                    Text(
+                    if (!narrowTextLayout) Text(
                         when { showQueue -> "ОЧЕРЕДЬ"; showSound -> "ЗВУК"; else -> when (activeTab) {
                             0 -> "МЕДИАТЕКА"; 1 -> "ЯНДЕКС"; 2 -> "ВИДЕО"; else -> "НАСТРОЙКИ"
                         } },
@@ -3269,12 +3273,14 @@ class MainActivity : ComponentActivity() {
     @Composable
     private fun PlayerBar() {
         var pendingSeek by remember(queueIndex, currentTitle) { mutableStateOf<Float?>(null) }
+        val narrowTextLayout = LocalConfiguration.current.screenWidthDp < 360 &&
+            LocalDensity.current.fontScale >= 1.25f
         Surface(color = Color.Transparent, contentColor = MaterialTheme.colorScheme.onSurface, shape = VakoUi.panel,
             modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp).vakoPanel(active = true)) {
             Column {
             Row(Modifier.fillMaxWidth().height(66.dp).clickable { showNowPlaying = true }.padding(horizontal = 6.dp),
                 verticalAlignment = Alignment.CenterVertically) {
-                    cover?.let { art ->
+                    if (!narrowTextLayout) cover?.let { art ->
                         Image(art, contentDescription = "Обложка трека", modifier = Modifier.width(42.dp).height(42.dp), contentScale = ContentScale.Crop)
                         Spacer(Modifier.width(8.dp))
                     }
@@ -3282,7 +3288,7 @@ class MainActivity : ComponentActivity() {
                         Text(currentTitle, maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.SemiBold)
                         Text(currentArtist, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodySmall)
                     }
-                    if (miniSpectrumEnabled && playing && visualizer != null && spectrum.isNotEmpty())
+                    if (!narrowTextLayout && miniSpectrumEnabled && playing && visualizer != null && spectrum.isNotEmpty())
                         MiniSpectrum(Modifier.width(30.dp).height(22.dp))
                     if (queue.getOrNull(queueIndex) is QueueItem.Remote) CurrentRemoteActions()
                     ActionIcon("⏮", "Предыдущий трек", ::previousTrack)
