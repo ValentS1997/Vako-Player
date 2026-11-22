@@ -37,7 +37,7 @@ internal object AudioThumbnails {
     @Composable
     fun Artwork(song: LocalSong, modifier: Modifier = Modifier) {
         val context = LocalContext.current
-        val key = "${song.uri}:${song.dateAdded}"
+        val key = "${song.uri}:${song.dateModified}:${song.dateAdded}"
         val artwork by produceState<Bitmap?>(initialValue = memory.get(key), key1 = key) {
             value = withContext(Dispatchers.IO) {
                 memory.get(key) ?: slots.withPermit {

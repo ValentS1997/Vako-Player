@@ -2233,7 +2233,8 @@ class MainActivity : ComponentActivity() {
                     items(filtered, key = { it.uri.toString() }) { song -> LocalSongRow(song, source = filtered) }
                 }
             } else {
-                LazyVerticalGrid(columns = GridCells.Fixed(if (audioViewMode == 1) 2 else 3),
+                val columns = if (audioViewMode == 2 && LocalConfiguration.current.screenWidthDp >= 350) 3 else 2
+                LazyVerticalGrid(columns = GridCells.Fixed(columns),
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                     verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     gridItems(filtered, key = { it.uri.toString() }) { song ->
