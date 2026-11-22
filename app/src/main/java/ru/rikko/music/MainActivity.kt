@@ -1492,7 +1492,9 @@ class MainActivity : ComponentActivity() {
                             }
                         } else {
                             TextButton(onClick = { navigationVisible = true; navigationTick++ },
-                                modifier = Modifier.fillMaxWidth().height(34.dp)) { Text("▴  Разделы") }
+                                modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
+                                Text("▴  Разделы", maxLines = 1)
+                            }
                         }
                     }
                 }
@@ -2201,8 +2203,10 @@ class MainActivity : ComponentActivity() {
 
     @Composable
     private fun AllSongsView() {
+        val searchLabel = if (LocalConfiguration.current.screenWidthDp < 360 &&
+            LocalDensity.current.fontScale >= 1.25f) "Поиск" else "Поиск в медиатеке"
         VakoSearchField(localFilter, onValueChange = { localFilter = it; selectedLocalUris = emptySet() },
-            label = "Поиск в медиатеке", modifier = Modifier.fillMaxWidth())
+            label = searchLabel, modifier = Modifier.fillMaxWidth())
         Spacer(Modifier.height(8.dp))
         val filtered = remember(localSongs, localFilter, sortMode, sortDescending) {
             sortedSongs(localSongs.filter {
